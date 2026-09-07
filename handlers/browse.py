@@ -192,4 +192,176 @@ async def browse_time_entered(message: Message, state: FSMContext):
 @router.callback_query(BrowseForm.confirming_filter, F.data == "bfilter:change")
 async def browse_filter_change(callback: CallbackQuery, state: FSMContext):
     await state.set_state(BrowseForm.choosing_role)
-    await callback.message.answer("Выбери роль:", reply_markup=role_k
+    await callback.message.answer("Выбери роль:", reply_markup=role_kb())
+    await callback.answer()
+
+
+@router.callback_query(BrowseForm.confirming_filter, F.data == "bfilter:yes")
+async def browse_filter_confirmed(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    await state.set_state(BrowseForm.viewing_cards)
+    await send_next_card(callback.message, callback.from_user.id, data["role"], state)
+    await callback.answer()
+
+
+@router.message(BrowseForm.confirming_filter)
+async def browse_filter_text(message: Message):
+    await message.answer(
+        "❗️Пожалуйста, подтверди фильтр кнопками ниже",
+        reply_markup=filter_confirm_kb(),
+    )
+
+
+@router.callback_query(BrowseForm.viewing_cards, F.data == "bnext")
+async def browse_next_card(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    await send_next_card(callback.message, callback.from_user.id, data["role"], state)
+    await callback.answer()
+
+
+@router.callback_query(BrowseForm.viewing_cards, F.data == "bmenu")
+async def browse_back_to_menu(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.answer("Ты в главном меню 👇")
+    await callback.answer()
+
+
+@router.message(BrowseForm.viewing_cards)
+async def browse_cards_text(message: Message, state: FSMContext):
+    """Текстовый ввод во время просмотра карточек проектов."""
+    data = await state.get_data()
+    project_id = data.get("current_project_id")
+    if project_id:
+        await message.answer(ERR_CARD_BUTTONS, reply_markup=card_kb(project_id))
+    else:
+        await message.answer(
+            "❗️Карточек под этот фильтр сейчас нет. "
+            "Вернись в меню и попробуй другую роль позже 🙂"
+        )
+
+
+@router.callback_query(F.data.startswith("bbookmark:"))
+async def browse_bookmark(callback: CallbackQuery):
+    project_id = int(callback.data.split(":", 1)[1])
+    await add_bookmark(callback.from_user.id, project_id)
+    await callback.answer("Добавлено в закладки ✅")
+
+
+@router.callback_query(F.data.startswith("bresp:"))
+async def browse_respond(callback: CallbackQuery, state: FSMContext):
+    project_id = int(callback.data.split(":", 1)[1])
+    applicant_id = callback.from_user.id
+
+    applicant = await get_user(applicant_id)
+    if not profile_is_complete(applicant):
+        await callback.answer("Сначала заполни анкету", show_alert=True)
+        await callback.message.answer(ERR_NO_PROFILE, reply_markup=fill_profile_kb())
+        return
+
+    await add_response(project_id, applicant_id)
+    await callback.answer("Заявка успешно отправлена✅")
+
+    project = await get_project(project_id)
+
+    try:
+        await callback.bot.send_message(
+            project["owner_id"],
+            "❗️Новый отклик на ваш проект\n\n" + await build_profile_card(applicant),
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="🟢Принять кандидата",
+                            callback_data=f"acc:{project_id}:{applicant_id}",
+                        ),
+                        InlineKeyboardButton(
+                            text="🔴Отклонить",
+                            callback_data=f"rej:{project_id}:{applicant_id}",
+                        ),
+                    ]
+                ]
+            ),
+        )
+    except Exception:
+        pass  # владелец мог заблокировать бота
+
+    data = await state.get_data()
+    role = data.get("role")
+    if role:
+        await send_next_card(callback.message, applicant_id, role, state)
+
+
+@router.callback_query(F.data.startswith("acc:"))
+async def accept_candidate(callback: CallbackQuery):
+    _, project_id, applicant_id = callback.data.split(":")
+    project_id = int(project_id)
+    applicant_id = int(applicant_id)
+
+    await set_response_status(project_id, applicant_id, "accepted")
+
+    project = await get_project(project_id)
+    applicant = await get_user(applicant_id)
+    owner = await get_user(project["owner_id"])
+
+    def tg_tag(user):
+        if user and user["username"]:
+            return f"@{user['username']}"
+        return "нет username в Telegram, свяжись через соцсети/телефон в анкете"
+
+    await callback.answer("Кандидат принят ✅")
+
+    review_kb_for_applicant = InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(
+                text="⭐ Оставить отзыв о владельце проекта",
+                callback_data=f"review:{project_id}:{project['owner_id']}",
+            )
+        ]]
+    )
+    review_kb_for_owner = InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(
+                text="⭐ Оставить отзыв о кандидате",
+                callback_data=f"review:{project_id}:{applicant_id}",
+            )
+        ]]
+    )
+
+    try:
+        await callback.bot.send_message(
+            applicant_id,
+            f"👍🏻Мэтч! Проект «{project['title']}» принял вашу заявку.\n"
+            f"Напишите прямо сейчас: {tg_tag(owner)}",
+            reply_markup=review_kb_for_applicant,
+        )
+    except Exception:
+        pass
+
+    await callback.message.answer(
+        f"👍🏻Мэтч! Вот контакты кандидата:\n"
+        f"Telegram: {tg_tag(applicant)}\n"
+        f"Соцсети: {applicant['socials']}\n"
+        f"Телефон: {applicant['phone']}",
+        reply_markup=review_kb_for_owner,
+    )
+
+
+@router.callback_query(F.data.startswith("rej:"))
+async def reject_candidate(callback: CallbackQuery):
+    _, project_id, applicant_id = callback.data.split(":")
+    project_id = int(project_id)
+    applicant_id = int(applicant_id)
+
+    await set_response_status(project_id, applicant_id, "rejected")
+    project = await get_project(project_id)
+
+    await callback.answer("Отклик отклонён")
+
+    try:
+        await callback.bot.send_message(
+            applicant_id,
+            f"К сожалению, в проект «{project['title']}» уже набран состав "
+            "или выбрана другая кандидатура. Не расстраивайтесь и продолжайте поиск!",
+        )
+    except Exception:
+        pass
