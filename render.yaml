@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: compass-bot
+    runtime: python
+    plan: free
+    buildCommand: pip install --prefer-binary -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: BOT_TOKEN
+        value: "8731088448:AAGmEi9Hanj90DvSIsY9-2UjX05d_b3AB6s"
