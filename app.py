@@ -3,52 +3,87 @@ import logging
 import os
 from threading import Thread
 
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 from flask import Flask
 
-# --- НАСТРОЙКА ЛОГИРОВАНИЯ ---
-logging.basicConfig(level=logging.INFO)
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
 
-# --- НАСТРОЙКА FLASK (ДЛЯ RENDER) ---
+# Импортируйте ваши модули. Убедитесь, что они лежат в репозитории!
+from database import init_db
+from handlers import common, profile, project, browse, review, fallback
+from middlewares import ContentGuardMiddleware
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# ==========================================
+# НАСТРОЙКА FLASK (ДЛЯ RENDER)
+# ==========================================
 app = Flask(__name__)
 
 @app.route('/')
 def home():
     return "Bot is running!"
 
-# --- НАСТРОЙКА БОТА ---
-API_TOKEN = os.getenv("BOT_TOKEN") # Токен берется из переменных окружения на Render
+# ==========================================
+# НАСТРОЙКА БОТА (ВСЕ ИЗ ВАШЕГО bot.py)
+# ==========================================
 
-# Если токена нет, код выдаст ошибку, но не упадет
+# Токен берем из переменных окружения (на Render вы добавите BOT_TOKEN)
+API_TOKEN = os.getenv("BOT_TOKEN")
 if not API_TOKEN:
-    raise ValueError("No BOT_TOKEN found in environment variables")
+    raise RuntimeError("BOT_TOKEN не найден. Проверь переменные окружения!")
 
 bot = Bot(token=API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp = Dispatcher()
+dp = Dispatcher(storage=MemoryStorage())
 
-# --- ОБРАБОТЧИКИ ---
-@dp.message(CommandStart())
-async def cmd_start(message: types.Message):
-    await message.answer("Привет! Я работаю на Render!")
+# Подключаем мидлварю
+dp.message.outer_middleware(ContentGuardMiddleware())
 
-# --- ЗАПУСК БОТА В ФОНЕ ---
+# Подключаем роутеры
+dp.include_router(common.router)
+dp.include_router(profile.router)
+dp.include_router(project.router)
+dp.include_router(browse.router)
+dp.include_router(review.router)
+dp.include_router(fallback.router)
+
+# ==========================================
+# ЗАПУСК БОТА В ФОНЕ
+# ==========================================
+
 async def bot_main():
-    # Важно: бесконечный цикл поллинга
+    # Запускаем базу данных
+    await init_db()
+
+    await bot.set_my_commands([
+        BotCommand(command="start", description="Запустить бота / главное меню"),
+        BotCommand(command="profile", description="Создать или изменить анкету"),
+        BotCommand(command="bookmarks", description="Посмотреть закладки"),
+        BotCommand(command="reviews", description="Посмотреть отзывы о себе"),
+        BotCommand(command="pause", description="Скрыть свою анкету"),
+        BotCommand(command="resume", description="Снова показывать анкету"),
+        BotCommand(command="cancel", description="Прервать текущий шаг"),
+        BotCommand(command="help", description="Список команд"),
+    ])
+
+    logger.info("Бот запускается...")
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 def run_bot():
-    # Запускаем асинхронную функцию бота в отдельном потоке
+    # Запускаем асинхронную функцию в отдельном потоке (так как Flask блокирует основной)
     asyncio.run(bot_main())
 
 if __name__ == "__main__":
-    # Запускаем бота в отдельном потоке, чтобы не блокировать Flask
+    # Запускаем бота в фоне
     bot_thread = Thread(target=run_bot)
-    bot_thread.daemon = True  # Поток закроется, если закроется основной процесс
+    bot_thread.daemon = True
     bot_thread.start()
     
-    # Запускаем Flask-сервер на порту, который даст Render (обычно 10000)
+    # Запускаем Flask, чтобы Render видел порт
     port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
