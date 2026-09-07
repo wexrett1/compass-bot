@@ -53,7 +53,9 @@ async def main():
 
     logger.info("Бот запускается...")
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    
+    # ВАЖНО: Добавляем список разрешенных обновлений, чтобы получать нажатия на кнопки
+    await dp.start_polling(bot, allowed_updates=["message", "callback_query", "inline_query", "chat_member"])
 
 
 if __name__ == "__main__":
