@@ -14,6 +14,7 @@ async def get_pool():
     if _pool is None:
         if not DATABASE_URL:
             raise RuntimeError("DATABASE_URL не найден. Проверьте переменные окружения на Render!")
+        # Создаем пул подключений (sslmode=require уже в ссылке)
         _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
     return _pool
 
@@ -165,8 +166,8 @@ async def get_next_project_for_role(user_id, role):
               )
             ORDER BY created_at DESC
             LIMIT 1
-            """,
-            user_id, f"%,{role},%",
+            """
+            , user_id, f"%,{role},%"
         )
 
 
@@ -239,8 +240,8 @@ async def get_bookmarks(user_id):
             JOIN projects ON projects.project_id = bookmarks.project_id
             WHERE bookmarks.user_id = $1
             ORDER BY bookmarks.created_at DESC
-            """,
-            user_id,
+            """
+            , user_id
         )
 
 
