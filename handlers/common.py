@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.filters import Command, StateFilter
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     Message,
@@ -19,14 +19,6 @@ STATUS_LABELS = {
     "accepted": "✅ Принято (мэтч)",
     "rejected": "❌ Отклонено",
 }
-
-MENU_BUTTONS = [
-    "🔍 Ищу команду",
-    "📢 Ищу человека в проект",
-    "👤 Мой профиль",
-    "🔴 Редактировать профиль",
-    "📁 Мои отклики",
-]
 
 # Поля, без которых анкета считается незаполненной
 REQUIRED_PROFILE_FIELDS = (
@@ -102,12 +94,3 @@ async def cmd_cancel(message: Message, state: FSMContext):
         return
     await state.clear()
     await message.answer("Ок, прервал. Ты в главном меню 👇", reply_markup=main_menu_kb())
-
-
-@router.message(F.text == "👤 Мой профиль")
-async def show_profile_button(message: Message):
-    user = await get_user(message.from_user.id)
-    if not user:
-        await message.answer("У тебя ещё нет анкеты. Создай её: /profile")
-        return
-    await message.answer(await build_profile_card(user))
