@@ -14,7 +14,6 @@ async def get_pool():
     if _pool is None:
         if not DATABASE_URL:
             raise RuntimeError("DATABASE_URL не найден. Проверьте переменные окружения на Render!")
-        # Создаем пул подключений (sslmode=require уже в ссылке)
         _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
     return _pool
 
@@ -94,7 +93,7 @@ async def init_db():
 async def upsert_user(user_id, username, **fields):
     pool = await get_pool()
     async with pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT user_id FROM users WHERE user_id = $1", (user_id,))
+        row = await conn.fetchrow("SELECT user_id FROM users WHERE user_id = $1", user_id)
         if row:
             if fields:
                 keys = ", ".join(f"{k} = ${i+1}" for i, k in enumerate(fields.keys()))
@@ -113,7 +112,7 @@ async def upsert_user(user_id, username, **fields):
 async def get_user(user_id):
     pool = await get_pool()
     async with pool.acquire() as conn:
-        return await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", (user_id,))
+        return await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
 
 
 async def set_active(user_id, is_active: bool):
@@ -141,14 +140,14 @@ async def create_project(owner_id, title, description, roles, topic, stage, fmt)
 async def get_project(project_id):
     pool = await get_pool()
     async with pool.acquire() as conn:
-        return await conn.fetchrow("SELECT * FROM projects WHERE project_id = $1", (project_id,))
+        return await conn.fetchrow("SELECT * FROM projects WHERE project_id = $1", project_id)
 
 
 async def get_user_projects(owner_id):
     pool = await get_pool()
     async with pool.acquire() as conn:
         return await conn.fetchall(
-            "SELECT * FROM projects WHERE owner_id = $1 ORDER BY created_at DESC", (owner_id,)
+            "SELECT * FROM projects WHERE owner_id = $1 ORDER BY created_at DESC", owner_id
         )
 
 
