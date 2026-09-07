@@ -104,39 +104,10 @@ async def cmd_cancel(message: Message, state: FSMContext):
     await message.answer("Ок, прервал. Ты в главном меню 👇", reply_markup=main_menu_kb())
 
 
-@router.message(~StateFilter(None), F.text.in_(MENU_BUTTONS))
-async def menu_button_during_form(message: Message, state: FSMContext):
-    """Пользователь нажал кнопку меню, не завершив анкету/создание проекта."""
-    await state.clear()
-    await message.answer(
-        "Текущий шаг прерван. Нажми нужную кнопку меню ещё раз 👇",
-        reply_markup=main_menu_kb(),
-    )
-
-
-@router.message(Command("help"))
-async def cmd_help(message: Message):
-    await message.answer(
-        "Команды:\n"
-        "/profile — создать или отредактировать анкету\n"
-        "/bookmarks — посмотреть закладки\n"
-        "/reviews — посмотреть отзывы о себе\n"
-        "/pause — скрыть свою анкету\n"
-        "/resume — снова показывать анкету\n"
-        "/cancel — прервать текущий шаг и вернуться в меню\n"
-    )
-
-
-@router.message(F.text == "📁 Мои отклики")
-async def my_responses(message: Message):
-    responses = await get_my_responses(message.from_user.id)
-    if not responses:
-        await message.answer("У тебя пока нет откликов. Загляни в «🔍 Ищу команду»!")
+@router.message(F.text == "👤 Мой профиль")
+async def show_profile_button(message: Message):
+    user = await get_user(message.from_user.id)
+    if not user:
+        await message.answer("У тебя ещё нет анкеты. Создай её: /profile")
         return
-
-    lines = []
-    for r in responses:
-        status = STATUS_LABELS.get(r["status"], r["status"])
-        lines.append(f"• {r['project_title']} — {status}")
-
-    await message.answer("📁 Твои отклики:\n\n" + "\n".join(lines))
+    await message.answer(await build_profile_card(user))
