@@ -1,27 +1,36 @@
-from typing import Any, Awaitable, Callable
-
 from aiogram import BaseMiddleware
-from aiogram.types import Message
-
-from validators import FALLBACK_MESSAGES, get_content_issue
+from aiogram.types import Message, CallbackQuery
 
 
 class ContentGuardMiddleware(BaseMiddleware):
-    """Отсекает голосовые, стикеры, файлы, контакты и т.п. до всех хендлеров.
-
-    Регистрируется как outer-middleware, поэтому срабатывает раньше фильтров:
-    в любом состоянии FSM и в главном меню пользователь получит понятную подсказку,
-    а не молчание бота.
+    """
+    Отсекает голосовые, стикеры, файлы и контакты.
+    НО: всегда пропускает CallbackQuery (кнопки) и текстовые сообщения.
     """
 
-    async def __call__(
-        self,
-        handler: Callable[[Message, dict[str, Any]], Awaitable[Any]],
-        event: Message,
-        data: dict[str, Any],
-    ) -> Any:
-        issue = get_content_issue(event)
-        if issue:
-            await event.answer(FALLBACK_MESSAGES[issue])
-            return None
+    async def __call__(self, handler, event, data):
+        # 1. ВСЕГДА пропускаем callback_query (нажатия на кнопки)
+        if isinstance(event, CallbackQuery):
+            return await handler(event, data)
+
+        # 2. Если это сообщение (Message):
+        if isinstance(event, Message):
+            # Отсекаем нежелательный контент
+            if event.content_type in [
+                "voice",
+                "video_note",
+                "sticker",
+                "photo",
+                "video",
+                "audio",
+                "document",
+                "contact",
+                "location",
+                "venue",
+            ]:
+                # Например, бот пишет: "Этот формат не поддерживается"
+                await event.answer("❗️ Этот формат сообщений не поддерживается. Напишите текстом.")
+                return
+
+        # 3. Без 조건 — пропускаем остальное
         return await handler(event, data)
