@@ -1,10 +1,11 @@
 import asyncio
 import logging
 import os
-import threading
+from threading import Thread
+
 from flask import Flask, jsonify
 
-# Импортируем ваш главный файл бота (используйте только нужные импорты!)
+# Импортируем ваш главный файл бота
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -64,7 +65,8 @@ async def bot_main():
     ])
     logger.info("Бот запускается...")
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
+
 
 def run_flask():
     """Запускаем Flask в отдельном потоке"""
@@ -73,7 +75,7 @@ def run_flask():
 
 if __name__ == '__main__':
     # Запускаем Flask в фоновом потоке (чтобы asyncio остался в главном)
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread = Thread(target=run_flask, daemon=True)
     flask_thread.start()
     
     # Запускаем бота В ГЛАВНОМ ПОТОКЕ (asyncio.run разрешен только здесь)
