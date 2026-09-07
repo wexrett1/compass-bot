@@ -89,7 +89,7 @@ async def ensure_profile(message: Message, user_id: int | None = None) -> bool:
 @router.message(Command("start"))
 async def cmd_start(message: Message):
     await message.answer(
-        "Привет! Я помогу тебе найти команду для projektu или собрать участников в свой проект.\n\n"
+        "Привет! Я помогу тебе найти команду для проекта или собрать участников в свой проект.\n\n"
         "Чтобы начать, укажи свою основную роль и заполни краткую анкету: /profile",
         reply_markup=main_menu_kb(),
     )
