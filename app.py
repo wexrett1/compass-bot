@@ -66,17 +66,18 @@ async def bot_main():
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
-def run_bot():
+def run_flask():
+    """Запускаем Flask в отдельном потоке"""
+    port = int(os.environ.get('PORT', 8000))
+    app.run(host='0.0.0.0', port=port)
+
+if __name__ == '__main__':
+    # Запускаем Flask в фоновом потоке (чтобы asyncio остался в главном)
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    
+    # Запускаем бота В ГЛАВНОМ ПОТОКЕ (asyncio.run разрешен только здесь)
     try:
         asyncio.run(bot_main())
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
-
-if __name__ == '__main__':
-    # Запускаем бота в фоновом потоке
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-    
-    # Запускаем Flask
-    port = int(os.environ.get('PORT', 8000))
-    app.run(host='0.0.0.0', port=port)
